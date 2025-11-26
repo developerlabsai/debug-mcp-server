@@ -173,6 +173,60 @@ export interface QuestionsMessage extends WebSocketMessage {
   };
 }
 
+// Backlog Types
+
+export type BacklogPriority = 'critical' | 'high' | 'medium' | 'low';
+export type BacklogStatus = 'pending' | 'in_progress' | 'resolved' | 'dismissed';
+
+export interface BacklogItem {
+  id: string;
+  reportId: string;
+  projectPath?: string;
+  comment: string;
+  url: string;
+  timestamp: number;
+  priority: BacklogPriority;
+  status: BacklogStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ListBacklogParams {
+  status?: BacklogStatus;
+  priority?: BacklogPriority;
+  projectPath?: string;
+  limit?: number;
+}
+
+export interface ListBacklogResult {
+  items: BacklogItem[];
+  stats: {
+    total: number;
+    byStatus: Record<BacklogStatus, number>;
+    byPriority: Record<BacklogPriority, number>;
+  };
+}
+
+export interface AddToBacklogParams {
+  reportId: string;
+  projectPath?: string;
+  comment: string;
+  url: string;
+  timestamp: number;
+  priority?: BacklogPriority;
+}
+
+export interface UpdateBacklogItemParams {
+  id: string;
+  status?: BacklogStatus;
+  priority?: BacklogPriority;
+  comment?: string;
+}
+
+export interface ProcessBacklogItemParams {
+  id: string;
+}
+
 // Utility Types
 
 export type Result<T, E = Error> =

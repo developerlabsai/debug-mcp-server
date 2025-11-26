@@ -11,6 +11,7 @@ import { loadConfig } from './config/index.js';
 import { ReportStorage } from './storage/reports.js';
 import { ScreenshotStorage } from './storage/screenshots.js';
 import { QuestionSessionManager } from './storage/questions.js';
+import { BacklogStorage } from './storage/backlog.js';
 import { MCPTools } from './mcp/tools.js';
 import { MCPResources } from './mcp/resources.js';
 import { MCPServerManager } from './mcp/server.js';
@@ -34,10 +35,12 @@ async function main() {
     logger.info('Initializing storage...');
     const reportStorage = new ReportStorage(config.storagePath);
     const screenshotStorage = new ScreenshotStorage(config.storagePath);
+    const backlogStorage = new BacklogStorage(config.storagePath);
     const questionManager = new QuestionSessionManager();
 
     await reportStorage.initialize();
     await screenshotStorage.initialize();
+    await backlogStorage.initialize();
 
     // Create underlying HTTP server first (needed for both HTTP and WebSocket)
     const underlyingServer = createServer();
@@ -45,13 +48,14 @@ async function main() {
     // Initialize WebSocket server first (so we can pass notifier to HTTP routes)
     const wsServer = new WSServer(underlyingServer, questionManager);
 
-    // Initialize HTTP server with auto-question notifier
+    // Initialize HTTP server with auto-question notifier and backlog storage
     const httpServer = new HTTPServer(
       config,
       reportStorage,
       screenshotStorage,
       questionManager,
-      (sessionId: string) => wsServer.pushQuestions(sessionId) // Auto-send questions on debug report
+      (sessionId: string) => wsServer.pushQuestions(sessionId), // Auto-send questions on debug report
+      backlogStorage
     );
 
     // Attach Express app to underlying server
@@ -62,7 +66,8 @@ async function main() {
     const mcpTools = new MCPTools(
       reportStorage,
       questionManager,
-      (sessionId: string) => wsServer.pushQuestions(sessionId)
+      (sessionId: string) => wsServer.pushQuestions(sessionId),
+      backlogStorage
     );
     const mcpResources = new MCPResources(reportStorage, screenshotStorage);
 
@@ -91,6 +96,12 @@ async function main() {
     const { deletedCount, freedBytes } = await reportStorage.deleteOldReports(config.retentionDays);
     if (deletedCount > 0) {
       logger.info(`Cleaned up ${deletedCount} old reports, freed ${Math.round(freedBytes / 1024)}KB`);
+    }
+
+    // Cleanup old resolved/dismissed backlog items
+    const backlogCleanupCount = await backlogStorage.cleanupOldItems(config.retentionDays);
+    if (backlogCleanupCount > 0) {
+      logger.info(`Cleaned up ${backlogCleanupCount} old backlog items`);
     }
 
     logger.info('✅ Debug MCP Server ready!');

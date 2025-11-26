@@ -107,6 +107,112 @@ export class MCPServerManager {
             },
           },
         },
+        // Backlog Tools
+        {
+          name: 'list_backlog',
+          description: 'List queued debug reports in the backlog with statistics. Returns items sorted by priority (critical > high > medium > low) then by age.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              status: {
+                type: 'string',
+                enum: ['pending', 'in_progress', 'resolved', 'dismissed'],
+                description: 'Filter by status',
+              },
+              priority: {
+                type: 'string',
+                enum: ['critical', 'high', 'medium', 'low'],
+                description: 'Filter by priority',
+              },
+              projectPath: {
+                type: 'string',
+                description: 'Filter by project path',
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of items to return',
+              },
+            },
+          },
+        },
+        {
+          name: 'get_next_backlog_item',
+          description: 'Get the next highest-priority pending backlog item to process',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
+        },
+        {
+          name: 'process_backlog_item',
+          description: 'Start processing a backlog item. Marks it as in_progress and returns the associated debug report.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'Backlog item ID',
+              },
+            },
+            required: ['id'],
+          },
+        },
+        {
+          name: 'resolve_backlog_item',
+          description: 'Mark a backlog item as resolved (issue fixed)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'Backlog item ID',
+              },
+            },
+            required: ['id'],
+          },
+        },
+        {
+          name: 'dismiss_backlog_item',
+          description: 'Dismiss a backlog item (not actionable or duplicate)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'Backlog item ID',
+              },
+            },
+            required: ['id'],
+          },
+        },
+        {
+          name: 'update_backlog_item',
+          description: 'Update a backlog item\'s status, priority, or comment',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'Backlog item ID',
+              },
+              status: {
+                type: 'string',
+                enum: ['pending', 'in_progress', 'resolved', 'dismissed'],
+                description: 'New status',
+              },
+              priority: {
+                type: 'string',
+                enum: ['critical', 'high', 'medium', 'low'],
+                description: 'New priority',
+              },
+              comment: {
+                type: 'string',
+                description: 'Updated comment',
+              },
+            },
+            required: ['id'],
+          },
+        },
       ],
     }));
 
@@ -132,6 +238,31 @@ export class MCPServerManager {
 
           case 'clear_old_reports':
             result = await this.tools.clearOldReports(args as any);
+            break;
+
+          // Backlog tools
+          case 'list_backlog':
+            result = await this.tools.listBacklog(args as any);
+            break;
+
+          case 'get_next_backlog_item':
+            result = await this.tools.getNextBacklogItem();
+            break;
+
+          case 'process_backlog_item':
+            result = await this.tools.processBacklogItem(args as any);
+            break;
+
+          case 'resolve_backlog_item':
+            result = await this.tools.resolveBacklogItem(args as any);
+            break;
+
+          case 'dismiss_backlog_item':
+            result = await this.tools.dismissBacklogItem(args as any);
+            break;
+
+          case 'update_backlog_item':
+            result = await this.tools.updateBacklogItem(args as any);
             break;
 
           default:

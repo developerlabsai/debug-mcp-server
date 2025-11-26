@@ -7,15 +7,24 @@ import type { Request, Response } from 'express';
 import type { ReportStorage } from '../storage/reports.js';
 import type { ScreenshotStorage } from '../storage/screenshots.js';
 import type { QuestionSessionManager } from '../storage/questions.js';
+import type { BacklogStorage } from '../storage/backlog.js';
 import type {
   SubmitDebugReportRequest,
   SubmitDebugReportResponse,
   SubmitAnswersRequest,
   SubmitAnswersResponse,
   DebugReport,
+  BacklogPriority,
 } from '../types/index.js';
 import { generateId } from '../lib/utils.js';
 import * as logger from '../lib/logger.js';
+
+// Extended request type with mode support
+interface SubmitDebugReportRequestWithMode extends SubmitDebugReportRequest {
+  mode?: 'wait' | 'backlog';
+  priority?: BacklogPriority;
+  projectPath?: string;
+}
 
 // Default clarifying questions to ask users
 const DEFAULT_QUESTIONS = [
@@ -50,7 +59,8 @@ export function createRoutes(
   reportStorage: ReportStorage,
   screenshotStorage: ScreenshotStorage,
   questionManager: QuestionSessionManager,
-  questionNotifier?: (sessionId: string) => void
+  questionNotifier?: (sessionId: string) => void,
+  backlogStorage?: BacklogStorage
 ): Router {
   const router = Router();
 
@@ -70,10 +80,11 @@ export function createRoutes(
 
   /**
    * Submit debug report from browser
+   * Supports both "wait" mode (sends questions) and "backlog" mode (queues for later)
    */
   router.post('/debug', async (req: Request, res: Response): Promise<void> => {
     try {
-      const body = req.body as SubmitDebugReportRequest;
+      const body = req.body as SubmitDebugReportRequestWithMode;
 
       // Validate required fields
       if (!body.logs || !body.url || !body.timestamp) {
@@ -118,9 +129,27 @@ export function createRoutes(
       // Save report
       await reportStorage.saveReport(report);
 
-      // Auto-send clarifying questions if notifier is available
+      // Check if this is backlog mode
+      const isBacklogMode = body.mode === 'backlog';
+
       let sessionId: string | undefined;
-      if (questionNotifier) {
+      let backlogItemId: string | undefined;
+
+      if (isBacklogMode && backlogStorage) {
+        // Add to backlog instead of sending questions
+        const backlogItem = await backlogStorage.addItem({
+          reportId,
+          projectPath: body.projectPath,
+          comment: body.comment || '',
+          url: body.url,
+          timestamp: body.timestamp,
+          priority: body.priority || 'medium',
+          status: 'pending',
+        });
+        backlogItemId = backlogItem.id;
+        logger.info(`Added report ${reportId} to backlog as item ${backlogItemId}`);
+      } else if (questionNotifier) {
+        // Wait mode - send clarifying questions
         sessionId = questionManager.createSession(DEFAULT_QUESTIONS, 300000); // 5 min timeout
         logger.info(`Auto-created question session ${sessionId} for report ${reportId}`);
         questionNotifier(sessionId);
@@ -132,6 +161,7 @@ export function createRoutes(
           reportId,
           timestamp: report.timestamp,
           sessionId, // Include session ID so widget knows questions are coming
+          ...(backlogItemId && { backlogItemId }), // Include backlog item ID if in backlog mode
         },
       };
 
@@ -195,6 +225,40 @@ export function createRoutes(
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
         code: 'SUBMISSION_ERROR',
+      });
+    }
+  });
+
+  /**
+   * Get backlog items (for dashboard or status check)
+   */
+  router.get('/backlog', async (_req: Request, res: Response): Promise<void> => {
+    try {
+      if (!backlogStorage) {
+        res.status(501).json({
+          success: false,
+          error: 'Backlog storage not enabled',
+          code: 'BACKLOG_NOT_ENABLED',
+        });
+        return;
+      }
+
+      const items = await backlogStorage.listItems();
+      const stats = await backlogStorage.getStats();
+
+      res.json({
+        success: true,
+        data: {
+          items,
+          stats,
+        },
+      });
+    } catch (error) {
+      logger.error('Error listing backlog:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        code: 'BACKLOG_ERROR',
       });
     }
   });

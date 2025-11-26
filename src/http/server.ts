@@ -10,6 +10,7 @@ import type { ServerConfig } from '../types/index.js';
 import type { ReportStorage } from '../storage/reports.js';
 import type { ScreenshotStorage } from '../storage/screenshots.js';
 import type { QuestionSessionManager } from '../storage/questions.js';
+import type { BacklogStorage } from '../storage/backlog.js';
 import * as logger from '../lib/logger.js';
 
 export class HTTPServer {
@@ -20,7 +21,8 @@ export class HTTPServer {
     reportStorage: ReportStorage,
     screenshotStorage: ScreenshotStorage,
     questionManager: QuestionSessionManager,
-    questionNotifier?: (sessionId: string) => void
+    questionNotifier?: (sessionId: string) => void,
+    backlogStorage?: BacklogStorage
   ) {
     this.app = express();
 
@@ -30,8 +32,8 @@ export class HTTPServer {
     this.app.use(express.json({ limit: '50mb' })); // Large limit for base64 screenshots
     this.app.use(validateBodySize(config.maxReportSize));
 
-    // Routes - pass notifier for auto-questions
-    const routes = createRoutes(reportStorage, screenshotStorage, questionManager, questionNotifier);
+    // Routes - pass notifier for auto-questions and backlog storage
+    const routes = createRoutes(reportStorage, screenshotStorage, questionManager, questionNotifier, backlogStorage);
     this.app.use('/api', routes);
 
     // Error handler (must be last)
