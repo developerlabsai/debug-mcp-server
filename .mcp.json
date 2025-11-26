@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "debug": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "cwd": "/Users/developerlabsai/Projects/debug-mcp-server"
+    }
+  }
+}
